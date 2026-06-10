@@ -1,7 +1,15 @@
+#!/usr/bin/env python3
+"""
+BountySystem - система мониторинга и оповещения о воздушных угрозах
+Файл: bounty_bot.py (НЕ server.py!)
+"""
+
 import asyncio
 import json
 import re
 import hashlib
+import logging
+import sys
 from datetime import datetime
 from math import radians, sin, cos, sqrt, atan2
 from typing import Dict, Tuple, List, Optional
@@ -12,7 +20,13 @@ from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from telethon import TelegramClient, events
 
-from config import *
+# Импорт конфигурации
+try:
+    from config import *
+except ImportError:
+    print("❌ Ошибка: файл config.py не найден!")
+    print("   Создайте config.py рядом с bounty_bot.py")
+    sys.exit(1)
 
 # ================= ИНИЦИАЛИЗАЦИЯ =================
 logging.basicConfig(
@@ -20,6 +34,13 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Проверка наличия обязательных переменных
+if OWNER_ID == 123456789:
+    logger.error("❌ OWNER_ID не настроен! Укажите ваш Telegram ID в config.py")
+    print("\n⚠️ ВНИМАНИЕ: Укажите ваш Telegram ID в config.py!")
+    print("   Получите его у @userinfobot в Telegram\n")
+    sys.exit(1)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -360,4 +381,10 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+    print("""
+╔═══════════════════════════════════════╗
+║        BountySystem v1.0              ║
+║    Система мониторинга угроз          ║
+╚═══════════════════════════════════════╝
+    """)
     asyncio.run(main())
