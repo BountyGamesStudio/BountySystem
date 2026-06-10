@@ -8,7 +8,7 @@ API_HASH = '18b67d6be3bd13bf0ba55a8d6bdb3482'
 BOT_TOKEN = '8748755580:AAHRNxTFNlMIyrZGLOeRXgNqH_qnUei65Ug'
 
 # ВАШ TELEGRAM ID (узнать у @userinfobot) - ОБЯЗАТЕЛЬНО ИЗМЕНИТЬ!
-OWNER_ID = 123456789  # ← ВСТАВЬТЕ СЮДА ВАШ ID, ИНАЧЕ БОТ НЕ ЗАПУСТИТСЯ!
+OWNER_ID = 7728468302  # ← ВСТАВЬТЕ СЮДА ВАШ ID, ИНАЧЕ БОТ НЕ ЗАПУСТИТСЯ!
 
 # Redis
 REDIS_HOST = 'localhost'
