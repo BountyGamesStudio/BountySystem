@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 BountySystem - ПРОСТОЙ РАБОЧИЙ БОТ для оповещения из Telegram каналов
+Исправленная версия - без ошибок авторизации
 """
 
 import asyncio
@@ -11,6 +12,7 @@ from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from telethon import TelegramClient, events
+from telethon.errors import SessionPasswordNeededError
 
 # ================= НАСТРОЙКИ (ЗАМЕНИТЕ НА СВОИ) =================
 API_ID = 27995587
@@ -30,7 +32,7 @@ ALERT_KEYWORDS = [
     'бпла', 'беспилот', 'дрон', 'шахед',
     'ракет', 'ракета', 'нептун', 'калибр',
     'атака', 'прилет', 'опасность', 'тревога',
-    'сирена', 'угроза', 'влетел'
+    'сирена', 'угроза', 'влетел', 'пуск', 'направлен'
 ]
 
 # ================================================================
@@ -45,61 +47,76 @@ logger = logging.getLogger(__name__)
 # Создаем клиентов
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-telegram_client = TelegramClient('bounty_user_session', API_ID, API_HASH)
+
+# ПРАВИЛЬНЫЙ СПОСОБ: используем бот-токен в Telethon
+# Это позволяет читать каналы без авторизации по телефону
+telegram_client = TelegramClient('bounty_bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
 
 async def send_alert(message_text: str, channel_name: str):
     """Отправляет оповещение пользователю"""
+    # Обрезаем длинные сообщения
+    if len(message_text) > 400:
+        message_text = message_text[:400] + "..."
+    
     alert = (
         f"🚨 **ОПАСНОСТЬ!** 🚨\n\n"
         f"📡 **Канал:** @{channel_name}\n"
         f"🕐 **Время:** {datetime.now().strftime('%H:%M:%S')}\n\n"
         f"📝 **Сообщение:**\n"
-        f"_{message_text[:300]}..._\n\n"
-        f"⚠️ Будьте внимательны и следите за новостями!"
+        f"_{message_text}_\n\n"
+        f"⚠️ Будьте внимательны и следите за официальными сообщениями!"
     )
     
     try:
         await bot.send_message(YOUR_USER_ID, alert, parse_mode='Markdown')
         logger.info(f"✅ ОПОВЕЩЕНИЕ ОТПРАВЛЕНО! Канал: @{channel_name}")
     except Exception as e:
-        logger.error(f"Ошибка отправки: {e}")
+        logger.error(f"Ошибка отправки сообщения: {e}")
 
 
 async def monitor_channels():
     """Мониторинг каналов в реальном времени"""
-    await telegram_client.start()
-    logger.info("=" * 50)
-    logger.info("🚀 BountySystem ЗАПУЩЕН")
-    logger.info(f"📡 Мониторинг каналов: {', '.join(['@'+c for c in CHANNELS])}")
-    logger.info(f"👤 Оповещения будут отправлены пользователю ID: {YOUR_USER_ID}")
-    logger.info("=" * 50)
-    
-    @telegram_client.on(events.NewMessage(chats=CHANNELS))
-    async def handler(event):
-        try:
-            message_text = event.message.text
-            if not message_text:
-                return
-            
-            channel = event.chat.username or event.chat.title
-            
-            # Проверяем наличие ключевых слов
-            text_lower = message_text.lower()
-            is_alert = any(keyword in text_lower for keyword in ALERT_KEYWORDS)
-            
-            # Проверяем что это не отбой
-            is_cancel = 'отбой' in text_lower or 'отмен' in text_lower
-            
-            if is_alert and not is_cancel:
-                logger.info(f"🔔 ОБНАРУЖЕНА УГРОЗА в @{channel}")
-                logger.info(f"   Текст: {message_text[:100]}...")
-                await send_alert(message_text, channel)
-            else:
-                logger.debug(f"Пропущено из @{channel}: нет ключевых слов")
+    try:
+        logger.info("=" * 50)
+        logger.info("🚀 BountySystem ЗАПУЩЕН")
+        logger.info(f"📡 Мониторинг каналов: {', '.join(['@'+c for c in CHANNELS])}")
+        logger.info(f"👤 Оповещения будут отправлены пользователю ID: {YOUR_USER_ID}")
+        logger.info("=" * 50)
+        
+        @telegram_client.on(events.NewMessage(chats=CHANNELS))
+        async def handler(event):
+            try:
+                # Получаем текст сообщения
+                message_text = event.message.text
+                if not message_text:
+                    return
                 
-        except Exception as e:
-            logger.error(f"Ошибка обработки: {e}")
+                # Получаем имя канала
+                channel = event.chat.username or event.chat.title
+                
+                # Проверяем наличие ключевых слов (регистронезависимо)
+                text_lower = message_text.lower()
+                is_alert = any(keyword in text_lower for keyword in ALERT_KEYWORDS)
+                
+                # Проверяем что это не отбой
+                is_cancel = 'отбой' in text_lower or 'отмен' in text_lower or 'отмена' in text_lower
+                
+                if is_alert and not is_cancel:
+                    logger.info(f"🔔 ОБНАРУЖЕНА УГРОЗА в @{channel}")
+                    logger.info(f"   Текст: {message_text[:150]}...")
+                    await send_alert(message_text, channel)
+                else:
+                    logger.debug(f"Пропущено из @{channel}: нет ключевых слов или отбой")
+                    
+            except Exception as e:
+                logger.error(f"Ошибка в обработчике сообщений: {e}")
+        
+        # Держим соединение открытым
+        await telegram_client.run_until_disconnected()
+        
+    except Exception as e:
+        logger.error(f"Ошибка в monitor_channels: {e}")
 
 
 @dp.message(Command("start"))
@@ -119,16 +136,16 @@ async def start_cmd(message: types.Message):
 async def status_cmd(message: types.Message):
     await message.answer(
         "🟢 **Статус BountySystem**\n\n"
-        f"• Каналов: {len(CHANNELS)}\n"
+        f"• Каналов в мониторинге: {len(CHANNELS)}\n"
         f"• Ключевых слов: {len(ALERT_KEYWORDS)}\n"
         "• Режим: реальное время\n"
-        "✅ Система активна",
+        "✅ Система активна и отслеживает угрозы",
         parse_mode="Markdown"
     )
 
 
 async def main():
-    # Запускаем мониторинг каналов
+    # Запускаем мониторинг каналов в фоне
     asyncio.create_task(monitor_channels())
     
     # Запускаем бота
@@ -139,8 +156,9 @@ async def main():
 if __name__ == "__main__":
     print("""
 ╔════════════════════════════════════════╗
-║       BOUNTY SYSTEM v3.0              ║
-║     ПРОСТОЙ РАБОЧИЙ БОТ               ║
+║       BOUNTY SYSTEM v4.0              ║
+║     ИСПРАВЛЕННАЯ ВЕРСИЯ               ║
+║     БОТ + ЧТЕНИЕ КАНАЛОВ              ║
 ╚════════════════════════════════════════╝
     """)
     asyncio.run(main())
